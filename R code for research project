@@ -1,0 +1,52 @@
+setwd("//studata09/home/MD/Mdp23tlm/ManWin/My Documents/R")
+#setwd("/Users/johnathancooper-knock/Downloads/BD PD Data/")
+#might need to install this every time --> install.packages("biomaRt")
+#library("VariantAnnotation", "biomaRt")
+library(biomaRt, VariantAnnotation)
+library(VariantAnnotation)
+#library(VarfromPDB)
+#library(rentrez) # may not be needed 
+symbol <- c('LRRK2', 'PINK1', 'SNCA', 'PARK2', 'PARK7', 'AFG3L2', 'ANO3', 'ATPA13', 'ATP7B', 'CYP27A1', 'FA2H', 'FTL', 'GBA', 'GCH1', 'GNAL', 'MAPT', 'PANK2', 'PNKD', 'PRKCG', 'PRRT2', 'SGCE', 'SLC16A2', 'SLC2A1', 'SPG11', 'SPR', 'TH', 'THAP1', 'WDR45')
+grch37 = useEnsembl(biomart="ensembl",GRCh=37,dataset="hsapiens_gene_ensembl")
+
+[This code creates a variable called symbol, and creates a list of genes screened for by the children’s hospital thought to be involved in Parkinson’s disease.]
+
+
+
+genes <- getBM(attributes=c('hgnc_symbol','chromosome_name','start_position','end_position'), filters ='hgnc_symbol', values =symbol, mart = grch37)
+rem1 <- grep("PATCH", genes[,2])
+rem2 <- grep("HSCHR1_2_CTG31", genes[,2])
+rem3 <- grep("MT", genes[,2])
+rem <- c(rem1,rem2, rem3)
+genes <- genes[-c(rem),]
+
+
+[This section of code filters out unwanted entries that would bulk out vcf files and would make the samples harder to analyse.] 
+
+# Define the function to process VCF file
+vcf_process <- function(x) {
+  result <- rep(0, 100000)
+  for (i in 1:length(genes[,1])) { 
+    chr <- paste("chr", genes[i, 2], sep = "")
+    start_position <- genes[i, 3]
+    end_position <- genes[i, 4]
+    g.gr <- GRanges(chr, IRanges(start = start_position, end = end_position))
+    params <- ScanVcfParam(which = g.gr)
+    vcf <- readVcf(TabixFile(x), "hg19", params)
+    vcf.Ranges <- data.frame(rowRanges(vcf), info(vcf))
+    if (length(vcf.Ranges[, 1]) == 0) next
+    vcf.mis <- row.names(vcf.Ranges)
+    if (length(vcf.mis) == 0) next
+    r <- which(result == 0)
+    r <- min(r)
+    result[r:(r + length(vcf.mis) - 1)] <- vcf.mis
+  }
+  return(result)  
+
+[This function processes the vcf files and returns the result. As it is a function, it can then be called on each vcf file without having to repeat the code each time individually, making it the program a lot less bulky. This is then done below]
+
+}
+# Call the function to process VCF file
+#1
+result <- vcf_process("Copy of S2020612-02_Variants.vcf.gz")
+write.csv(result, file = "Copy of S2020612-02_Variants_RESULTS.csv")
